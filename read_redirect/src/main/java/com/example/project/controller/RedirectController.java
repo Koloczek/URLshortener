@@ -1,54 +1,39 @@
-package com.example.project.controller;
+package com.example.controller;
 
-import com.example.project.model.ShortUrlEntity;
-import com.example.project.service.RedirectService;
-import org.springframework.http.HttpHeaders;
+import com.example.service.ShortUrlService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Optional;
+import java.net.URI;
 
 @RestController
-@RequestMapping("/api/links")
 public class RedirectController {
 
-    private final RedirectService service;
+    private final ShortUrlService shortUrlService;
 
-    public RedirectController(RedirectService service) {
-        this.service = service;
+    public RedirectController(ShortUrlService shortUrlService) {
+        this.shortUrlService = shortUrlService;
     }
 
-    @PostMapping
-    public ResponseEntity<LinkResponse> create(@RequestBody LinkRequest request) {
-        ShortUrlEntity mapping = service.createMapping(request.getUrl());
-        String shortPath = "/l/" + mapping.getId();
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(new LinkResponse(shortPath));
-    }
-
-    @GetMapping("/l/{id}")
-    public ResponseEntity<Void> redirect(@PathVariable String id) {
-        Optional<ShortUrlEntity> maybe = service.lookup(id);
-        if (maybe.isPresent()) {
-            HttpHeaders headers = new HttpHeaders();
-            headers.add("Location", maybe.get().getOriginalUrl());
-            return new ResponseEntity<>(headers, HttpStatus.SEE_OTHER);
+    /**
+     * Endpoint do przekierowań
+     * GET /{shortKey}
+     */
+    @GetMapping("/{shortKey}")
+    public ResponseEntity<Void> redirect(@PathVariable String shortKey) {
+        String originalUrl = shortUrlService.getOriginalUrl(shortKey);
+        
+        if (originalUrl == null) {
+            // URL nie istnieje, wygasł lub został zablokowany
+            return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.notFound().build();
-    }
-
-    public static class LinkRequest {
-        private String url;
-        public String getUrl() { return url; }
-        public void setUrl(String url) { this.url = url; }
-    }
-
-    public static class LinkResponse {
-        private String shortUrl;
-        public LinkResponse(String shortUrl) { this.shortUrl = shortUrl; }
-        public String getShortUrl() { return shortUrl; }
-        public void setShortUrl(String shortUrl) { this.shortUrl = shortUrl; }
+        
+        // Przekierowanie 302
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(URI.create(originalUrl))
+                .build();
     }
 }

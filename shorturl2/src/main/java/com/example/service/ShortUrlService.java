@@ -18,14 +18,27 @@ public class ShortUrlService {
 
     private final ShortUrlRepository repository;
     private final SimpleBlockedUrlListener blockedUrlListener;
+    private final ForbiddenWordService forbiddenWordService; 
 
-    public ShortUrlService(ShortUrlRepository repository, SimpleBlockedUrlListener blockedUrlListener) {
+    public ShortUrlService(ShortUrlRepository repository, 
+                          SimpleBlockedUrlListener blockedUrlListener,
+                          ForbiddenWordService forbiddenWordService) { 
         this.repository = repository;
         this.blockedUrlListener = blockedUrlListener;
+        this.forbiddenWordService = forbiddenWordService;
     }
 
     public String shortenUrl(String originalUrl) {
-        // 🚨 SPRAWDŹ CZY URL JEST ZABLOKOWANY
+        // 🆕 SPRAWDŹ SŁOWA ZAKAZANE JAKO PIERWSZE
+        Optional<String> forbiddenWord = forbiddenWordService.checkForForbiddenWords(originalUrl);
+        if (forbiddenWord.isPresent()) {
+            // Wyślij alert na Kafkę
+            forbiddenWordService.sendForbiddenWordAlert(originalUrl, forbiddenWord.get());
+            // Rzuć wyjątek z informacją o słowie zakazanym
+            throw new IllegalArgumentException("URL zawiera zabronione słowo: " + forbiddenWord.get());
+        }
+
+        // 🚨 SPRAWDŹ CZY URL JEST ZABLOKOWANY (istniejąca logika)
         if (blockedUrlListener.isUrlBlocked(originalUrl)) {
             throw new RuntimeException("URL jest zablokowany przez system bezpieczeństwa: " + originalUrl);
         }
@@ -57,11 +70,24 @@ public class ShortUrlService {
             return null;
         }
 
-        // 🚨 SPRAWDŹ CZY URL NIE ZOSTAŁ ZABLOKOWANY W MIĘDZYCZASIE
+        // 🆕 SPRAWDŹ SŁOWA ZAKAZANE RÓWNIEŻ PRZY POBIERANIU
+        Optional<String> forbiddenWord = forbiddenWordService.checkForForbiddenWords(entity.getOriginalUrl());
+        if (forbiddenWord.isPresent()) {
+            // Wyślij alert i usuń z bazy
+            forbiddenWordService.sendForbiddenWordAlert(entity.getOriginalUrl(), forbiddenWord.get());
+            repository.delete(entity);
+            return null;
+        }
+
+        // 🚨 SPRAWDŹ CZY URL NIE ZOSTAŁ ZABLOKOWANY W MIĘDZYCZASIE (istniejąca logika)
         if (blockedUrlListener.isUrlBlocked(entity.getOriginalUrl())) {
             repository.delete(entity); // usuń zablokowany URL
             return null;
         }
+
+        // Aktualizuj czas ostatniego dostępu
+        entity.updateLastAccessTime();
+        repository.save(entity);
 
         return entity.getOriginalUrl();
     }
