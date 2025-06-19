@@ -1,1 +1,3 @@
-curl -X POST http://localhost:8081/shorten -H "Content-Type: application/json" -d "{\"url\":\"https://www.onet.pl\"}"
+curl -X POST http://localhost:8081/shorten -H "Content-Type: application/json" -d "{\"url\":\"https://www.wp.pl\"}"
+
+curl -X POST http://localhost:8081/shorten -H "Content-Type: application/json" -d '{"url": "http://onet.pl/malware"}'
